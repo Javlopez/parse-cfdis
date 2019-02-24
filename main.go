@@ -19,6 +19,11 @@ type Receptor struct {
 	Uso     string   `xml:"UsoCFDI,attr"`
 }
 
+type Impuestos struct {
+	XMLName xml.Name `xml:"Impuestos"`
+	Total   string   `xml:"TotalImpuestosTrasladados,attr"`
+}
+
 type Concepto struct {
 	XMLName     xml.Name `xml:"Concepto"`
 	Descripcion string   `xml:"Descripcion,attr"`
@@ -34,7 +39,8 @@ type Comprobante struct {
 	Total       string   `xml:"Total,attr"`
 	Emisor      Emisor
 	Receptor    Receptor
-	Conceptos   []Concepto `xml:"Conceptos>Concepto"`
+	Conceptos   Concepto `xml:"Conceptos>Concepto"`
+	Impuestos   Impuestos
 }
 
 func main() {
@@ -46,6 +52,7 @@ func main() {
 		fmt.Printf("error: %v", err)
 		return
 	}
+
 	fmt.Printf("XMLName: %#v\n", c.XMLName)
 	fmt.Printf("Folio: %q\n", c.Folio)
 	fmt.Printf("Fecha: %q\n", c.Fecha)
@@ -54,12 +61,8 @@ func main() {
 	fmt.Printf("SubTotal: %q\n", c.SubTotal)
 	fmt.Printf("Emisor: %q\n", c.Emisor.Name)
 	fmt.Printf("Receptor: %q\n", c.Receptor.Rfc)
-	fmt.Printf("Conceptos: %q\n", c.Conceptos[0].Descripcion)
-	//for _, concepto := range c.Conceptos.Concepto {
-	//	fmt.Printf("concepto: %q\n", concepto)
-	//}
-	//fmt.Printf("Descripcion: %q\n", c.Conceptos.Concepto)
-
+	fmt.Printf("Conceptos: %q\n", c.Conceptos.Descripcion)
+	fmt.Printf("Impuestos: %q\n", c.Impuestos.Total)
 }
 
 func parseFile(file string) []byte {
