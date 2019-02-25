@@ -1,83 +1,86 @@
 package main
 
 import (
+	"archive/zip"
+	"encoding/csv"
 	"encoding/xml"
+	"flag"
 	"fmt"
 	"io"
 	"io/ioutil"
+	"log"
 	"os"
+
+	"github.com/Javlopez/cfdi-parser/internals/cfdi"
 )
 
-type Emisor struct {
-	XMLName xml.Name `xml:"Emisor"`
-	Name    string   `xml:"Nombre,attr"`
-}
-
-type Receptor struct {
-	XMLName xml.Name `xml:"Receptor"`
-	Rfc     string   `xml:"Rfc,attr"`
-	Uso     string   `xml:"UsoCFDI,attr"`
-}
-
-type Impuestos struct {
-	XMLName xml.Name `xml:"Impuestos"`
-	Total   string   `xml:"TotalImpuestosTrasladados,attr"`
-}
-
-type Concepto struct {
-	XMLName     xml.Name `xml:"Concepto"`
-	Descripcion string   `xml:"Descripcion,attr"`
-}
-
-//Comprobante
-type Comprobante struct {
-	XMLName     xml.Name `xml:"Comprobante"`
-	Folio       string   `xml:"Folio,attr"`
-	Fecha       string   `xml:"Fecha,attr"`
-	FormaDePago string   `xml:"FormaPago,attr"`
-	SubTotal    string   `xml:"SubTotal,attr"`
-	Total       string   `xml:"Total,attr"`
-	Emisor      Emisor
-	Receptor    Receptor
-	Conceptos   Concepto `xml:"Conceptos>Concepto"`
-	Impuestos   Impuestos
-}
-
 func main() {
-	xmlData := parseFile("0AF59B69-355A-4407-980E-0A240A18D355.xml")
-	c := Comprobante{Folio: "none"}
-	err := xml.Unmarshal(xmlData, &c)
+	data := [][]string{}
 
-	if err != nil {
-		fmt.Printf("error: %v", err)
-		return
+	dir := flag.String("dir", "", "Por favor ingresa el nombre del directorio")
+	output := flag.String("output", "output.csv", "Por favor ingresa el destino de tu archivo csv")
+
+	var usage = func() {
+		fmt.Fprintf(os.Stderr, "Usage: --dir=dir123.zip\n")
+		flag.PrintDefaults()
+	}
+	flag.Parse()
+
+	if *dir == "" {
+		usage()
+		os.Exit(1)
 	}
 
-	fmt.Printf("XMLName: %#v\n", c.XMLName)
-	fmt.Printf("Folio: %q\n", c.Folio)
-	fmt.Printf("Fecha: %q\n", c.Fecha)
-	fmt.Printf("FormaDePago: %q\n", c.FormaDePago)
-	fmt.Printf("Total: %q\n", c.Total)
-	fmt.Printf("SubTotal: %q\n", c.SubTotal)
-	fmt.Printf("Emisor: %q\n", c.Emisor.Name)
-	fmt.Printf("Receptor: %q\n", c.Receptor.Rfc)
-	fmt.Printf("Conceptos: %q\n", c.Conceptos.Descripcion)
-	fmt.Printf("Impuestos: %q\n", c.Impuestos.Total)
-}
+	zipDir := *dir
+	outputFile := *output
 
-func parseFile(file string) []byte {
-	handle, err := os.Open(file)
+	r, err := zip.OpenReader(zipDir)
 
 	if err != nil {
-		return []byte{}
+		log.Fatal(err)
 	}
 
-	defer handle.Close()
-	return ReadXML(handle)
+	defer r.Close()
+
+	data = append(data, []string{"Folio", "Fecha", "Forma de Pago", "Emisor", "Concepto", "Subtotal", "Impuestos", "Total"})
+
+	for _, f := range r.File {
+
+		rc, _ := f.Open()
+		xmlData := ReadXML(rc)
+		c := cfdi.Comprobante{Folio: "none"}
+		err := xml.Unmarshal(xmlData, &c)
+
+		if err != nil {
+			fmt.Printf("error: %v", err)
+			return
+		}
+		data = append(data, []string{c.Folio, c.Fecha, c.FormaDePago, c.Emisor.Name, c.Conceptos.Descripcion, c.SubTotal, c.Impuestos.Total, c.Total})
+	}
+
+	WriteCsvFile(outputFile, data)
 }
 
 //ReadXML method
 func ReadXML(handle io.Reader) []byte {
 	byteValue, _ := ioutil.ReadAll(handle)
 	return byteValue
+}
+
+func WriteCsvFile(name string, data [][]string) {
+	file, err := os.Create(name)
+	if err != nil {
+		log.Fatal("Cannot create csv file", err)
+	}
+	defer file.Close()
+
+	writer := csv.NewWriter(file)
+	defer writer.Flush()
+
+	for _, value := range data {
+		err := writer.Write(value)
+		if err != nil {
+			log.Fatal("Cannot write to csv file", err)
+		}
+	}
 }
